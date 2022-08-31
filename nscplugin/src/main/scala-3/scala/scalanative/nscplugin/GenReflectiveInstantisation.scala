@@ -16,6 +16,8 @@ import nir._
 import scala.scalanative.util.ScopedVar
 import scala.scalanative.util.ScopedVar.{scoped, toValue}
 
+import pythonparse.Ast
+
 object GenReflectiveInstantisation {
   object nirSymbols {
     val AbstractFunction0Name = Global.Top("scala.runtime.AbstractFunction0")
@@ -83,11 +85,8 @@ trait GenReflectiveInstantisation(using Context) {
       .filter(_.nonEmpty)
       .foreach { body =>
         generatedDefns +=
-          Defn.Define(
-            Attrs(),
-            name,
-            nir.Type.Function(Seq.empty[nir.Type], Type.Unit),
-            body
+          Ast.FunctionDef(
+            identifier(name), args = Seq.empty, body: Seq[stmt] = body.map(, decorator_list = Seq.empty, ret = Some(Type.Unit))
           )
       }
   }

@@ -14,6 +14,7 @@ import dotty.tools.FatalError
 
 import scala.collection.mutable
 import scala.language.implicitConversions
+import pythonparse.Ast
 
 class NirCodeGen(val settings: GenNIR.Settings)(using ctx: Context)
     extends NirGenStat
@@ -128,7 +129,7 @@ class NirCodeGen(val settings: GenNIR.Settings)(using ctx: Context)
 
   private def genIRFile(
       outfile: dotty.tools.io.AbstractFile,
-      defns: Seq[nir.Defn]
+      defns: Seq[Ast.stmt]
   ): Unit = {
     import scalanative.nir.serialization.serializeBinary
     val output = outfile.bufferedOutput

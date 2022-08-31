@@ -25,7 +25,7 @@ trait NirGenStat(using Context) {
   self: NirCodeGen =>
   import positionsConversions.fromSpan
 
-  protected val generatedDefns = mutable.UnrolledBuffer.empty[nir.Defn]
+  protected val generatedDefns = mutable.UnrolledBuffer.empty[pythonparse.Ast.stmt]
   protected val generatedStaticForwarderClasses =
     mutable.Map.empty[Symbol, StaticForwarderClass]
 
