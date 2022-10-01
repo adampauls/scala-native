@@ -25,13 +25,13 @@ trait NirGenStat(using Context) {
   self: NirCodeGen =>
   import positionsConversions.fromSpan
 
-  protected val generatedDefns = mutable.UnrolledBuffer.empty[pythonparse.Ast.stmt]
+  protected val generatedDefns = mutable.UnrolledBuffer.empty[pythonparse.Ast.Def]
   protected val generatedStaticForwarderClasses =
     mutable.Map.empty[Symbol, StaticForwarderClass]
 
   protected case class StaticForwarderClass(
-      defn: nir.Defn.Class,
-      forwarders: Seq[nir.Defn.Define]
+      defn: pythonparse.Ast.stmt.ClassDef,
+      forwarders: Seq[pythonparse.Ast.stmt]
   )
 
   def genClass(td: TypeDef)(using Context): Unit = {

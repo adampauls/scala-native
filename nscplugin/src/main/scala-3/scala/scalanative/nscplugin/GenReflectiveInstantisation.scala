@@ -30,6 +30,7 @@ object GenReflectiveInstantisation {
 
 trait GenReflectiveInstantisation(using Context) {
   self: NirCodeGen =>
+
   import GenReflectiveInstantisation._
   import positionsConversions.given
 
@@ -39,10 +40,12 @@ trait GenReflectiveInstantisation(using Context) {
   protected class ReflectiveInstantiationBuffer(fqcn: String) {
     val name = nir.Global.Top(fqcn + "$scalanative$ReflectivelyInstantiate$")
     reflectiveInstantiationBuffers += this
-    private val buf = mutable.UnrolledBuffer.empty[nir.Defn]
+    private val buf = mutable.UnrolledBuffer.empty[Ast.Def]
 
-    def +=(defn: nir.Defn): Unit = buf += defn
+    def +=(defn: Ast.Def): Unit = buf += defn
+
     def nonEmpty = buf.nonEmpty
+
     def toSeq = buf.toSeq
   }
 
@@ -68,6 +71,7 @@ trait GenReflectiveInstantisation(using Context) {
 
   private def registerReflectiveInstantiation(td: TypeDef): Unit = {
     given nir.Position = td.span
+
     val sym: Symbol = curClassSym
     val owner = genTypeName(sym)
     val name = owner.member(nir.Sig.Clinit())
@@ -85,21 +89,26 @@ trait GenReflectiveInstantisation(using Context) {
       .filter(_.nonEmpty)
       .foreach { body =>
         generatedDefns +=
-          Ast.FunctionDef(
-            identifier(name), args = Seq.empty, body: Seq[stmt] = body.map(, decorator_list = Seq.empty, ret = Some(Type.Unit))
+          Ast.stmt.FunctionDef(
+            Ast.identifier(name.mangle),
+            args = Ast.arguments(),
+            body = body.map(s => ???),
+            decorator_list = Seq.empty,
+            ret = Some(Ast.identifier(Type.Unit.mangle))
           )
       }
   }
 
   private def registerModuleClass(
-      td: TypeDef
-  ): Seq[Inst] = {
+                                   td: TypeDef
+                                 ): Seq[Inst] = {
     val fqSymId = curClassSym.get.fullName.mangledString
     val fqSymName = Global.Top(fqSymId)
     val fqcnArg = Val.String(fqSymId)
     val runtimeClassArg = Val.ClassOf(fqSymName)
 
     given nir.Position = td.span
+
     given reflInstBuffer: ReflectiveInstantiationBuffer =
       ReflectiveInstantiationBuffer(fqSymId)
 
@@ -118,8 +127,8 @@ trait GenReflectiveInstantisation(using Context) {
   }
 
   private def registerNormalClass(
-      td: TypeDef
-  ): Seq[Inst] = {
+                                   td: TypeDef
+                                 ): Seq[Inst] = {
     given nir.Position = td.span
 
     val fqSymId = curClassSym.get.fullName.mangledString
@@ -158,10 +167,10 @@ trait GenReflectiveInstantisation(using Context) {
   // Generate the constructor for the class instantiator class,
   // which is expected to extend one of scala.runtime.AbstractFunctionX.
   private def genConstructor(
-      superClass: Global
-  )(using
-      nir.Position
-  )(using reflInstBuffer: ReflectiveInstantiationBuffer): Unit = {
+                              superClass: Global
+                            )(using
+                              nir.Position
+                            )(using reflInstBuffer: ReflectiveInstantiationBuffer): Unit = {
     withFreshExprBuffer { buf ?=>
       val body = {
         // first argument is this
@@ -178,21 +187,23 @@ trait GenReflectiveInstantisation(using Context) {
         buf.toSeq
       }
 
-      reflInstBuffer += Defn.Define(
-        Attrs(),
-        reflInstBuffer.name.member(Sig.Ctor(Seq())),
-        nir.Type.Function(Seq(Type.Ref(reflInstBuffer.name)), Type.Unit),
-        body
+      reflInstBuffer += Ast.stmt.FunctionDef(
+        Ast.identifier(reflInstBuffer.name.member(Sig.Ctor(Seq())).mangle),
+        // TODO argument type, not the name
+        arguments = Ast.arguments(Seq(Ast.expr.Name(Ast.identifier(reflInstBuffer.name.mangle), ???))),
+          body = body.map(s => ???),
+          decorator_list = Seq.empty,
+          ret = Some(Ast.identifier(Type.Unit.mangle))
       )
     }
   }
 
-// Allocate and construct an object, using the provided ExprBuffer.
+  // Allocate and construct an object, using the provided ExprBuffer.
   private def allocAndConstruct(
-      name: Global,
-      argTypes: Seq[nir.Type],
-      args: Seq[Val]
-  )(using pos: nir.Position, buf: ExprBuffer): Val = {
+                                 name: Global,
+                                 argTypes: Seq[nir.Type],
+                                 args: Seq[Val]
+                               )(using pos: nir.Position, buf: ExprBuffer): Val = {
     val alloc = buf.classalloc(name, unwind(curFresh))
     buf.call(
       Type.Function(Type.Ref(name) +: argTypes, Type.Unit),
@@ -204,12 +215,12 @@ trait GenReflectiveInstantisation(using Context) {
   }
 
   private def genModuleLoader(
-      fqSymName: Global
-  )(using
-      pos: nir.Position,
-      buf: ExprBuffer,
-      reflInstBuffer: ReflectiveInstantiationBuffer
-  ): Val = {
+                               fqSymName: Global
+                             )(using
+                               pos: nir.Position,
+                               buf: ExprBuffer,
+                               reflInstBuffer: ReflectiveInstantiationBuffer
+                             ): Val = {
     val applyMethodSig = Sig.Method("apply", Seq(Rt.Object))
     val enclosingClass = curClassSym.get.originalOwner
 
@@ -229,22 +240,23 @@ trait GenReflectiveInstantisation(using Context) {
         buf.toSeq
       }
 
-      reflInstBuffer += Defn.Define(
-        Attrs(),
-        reflInstBuffer.name.member(applyMethodSig),
-        nir.Type.Function(Seq(Type.Ref(reflInstBuffer.name)), Rt.Object),
-        body
+      reflInstBuffer += Ast.stmt.FunctionDef(
+        Ast.identifier(reflInstBuffer.name.member(applyMethodSig).mangle),
+        // TODO argument type, not the name
+        arguments = Ast.arguments(Seq(Ast.expr.Name(Ast.identifier(Seq(Type.Ref(reflInstBuffer.name)))))),
+        body = body.map(s => ???),
+        decorator_list = Seq.empty,
+        ret = Some(Ast.identifier(Rt.Object.mangle))
       )
     }
 
     // Generate the module loader class constructor.
     genConstructor(nirSymbols.AbstractFunction0Name)
 
-    reflInstBuffer += Defn.Class(
-      Attrs(),
-      reflInstBuffer.name,
-      Some(nirSymbols.AbstractFunction0Name),
-      Seq(nirSymbols.SerializableName)
+    reflInstBuffer += Ast.stmt.ClassDef(
+      Ast.identifier(reflInstBuffer.name.mangle),
+      bases = Seq(nirSymbols.AbstractFunction1Name, nirSymbols.SerializableName),
+      body = Seq.empty, decorator_list = Seq.empty
     )
 
     // Allocate and return an instance of the generated class.
@@ -253,8 +265,8 @@ trait GenReflectiveInstantisation(using Context) {
 
   // Create a new Tuple2 and initialise it with the provided values.
   private def createTuple(arg1: Val, arg2: Val)(using
-      nir.Position,
-      ExprBuffer
+                                                nir.Position,
+                                                ExprBuffer
   ): Val = {
     allocAndConstruct(
       nirSymbols.Tuple2Name,
@@ -264,9 +276,9 @@ trait GenReflectiveInstantisation(using Context) {
   }
 
   private def genClassConstructorsInfo(
-      fqSymName: Global.Top,
-      ctors: Seq[Symbol]
-  )(using pos: nir.Position, buf: ExprBuffer): Val = {
+                                        fqSymName: Global.Top,
+                                        ctors: Seq[Symbol]
+                                      )(using pos: nir.Position, buf: ExprBuffer): Val = {
     val applyMethodSig = Sig.Method("apply", Seq(Rt.Object, Rt.Object))
 
     // Constructors info is an array of Tuple2 (tpes, inst), where:
@@ -284,7 +296,9 @@ trait GenReflectiveInstantisation(using Context) {
     for ((ctor, ctorIdx) <- ctors.zipWithIndex) {
       val ctorSig = genMethodSig(ctor)
       val ctorArgsSig = ctorSig.args.map(_.mangle).mkString
+
       given nir.Position = ctor.span
+
       given reflInstBuffer: ReflectiveInstantiationBuffer =
         ReflectiveInstantiationBuffer(fqSymName.id + ctorArgsSig)
 
@@ -303,21 +317,21 @@ trait GenReflectiveInstantisation(using Context) {
           // Extract and cast arguments to proper types.
           val argsVals =
             for (arg, argIdx) <- ctorSig.args.tail.zipWithIndex
-            yield {
-              val elem =
-                buf.arrayload(
-                  Rt.Object,
-                  argsArg,
-                  Val.Int(argIdx),
-                  unwind(curFresh)
-                )
-              // If the expected argument type can be boxed (i.e. is a primitive
-              // type), then we need to unbox it before passing it to C.
-              Type.box.get(arg) match {
-                case Some(bt) => buf.unbox(bt, elem, unwind(curFresh))
-                case None     => buf.as(arg, elem, unwind(curFresh))
+              yield {
+                val elem =
+                  buf.arrayload(
+                    Rt.Object,
+                    argsArg,
+                    Val.Int(argIdx),
+                    unwind(curFresh)
+                  )
+                // If the expected argument type can be boxed (i.e. is a primitive
+                // type), then we need to unbox it before passing it to C.
+                Type.box.get(arg) match {
+                  case Some(bt) => buf.unbox(bt, elem, unwind(curFresh))
+                  case None => buf.as(arg, elem, unwind(curFresh))
+                }
               }
-            }
 
           // Allocate a new instance and call constructor
           val alloc = allocAndConstruct(
@@ -330,7 +344,7 @@ trait GenReflectiveInstantisation(using Context) {
           buf.toSeq
         }
 
-        reflInstBuffer += Defn.Define(
+        reflInstBuffer += Ast.stmt.FunctionDef(
           Attrs.None,
           reflInstBuffer.name.member(applyMethodSig),
           nir.Type.Function(
@@ -344,11 +358,10 @@ trait GenReflectiveInstantisation(using Context) {
       // Generate the class instantiator constructor.
       genConstructor(nirSymbols.AbstractFunction1Name)
 
-      reflInstBuffer += Defn.Class(
-        Attrs(),
-        reflInstBuffer.name,
-        Some(nirSymbols.AbstractFunction1Name),
-        Seq(nirSymbols.SerializableName)
+      reflInstBuffer += Ast.stmt.ClassDef(
+        Ast.identifier(reflInstBuffer.name.mangle),
+        bases = Seq(nirSymbols.AbstractFunction1Name, nirSymbols.SerializableName),
+        body = Seq.empty, decorator_list = Seq.empty
       )
 
       // Allocate an instance of the generated class.

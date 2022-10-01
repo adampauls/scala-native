@@ -32,13 +32,17 @@ object Ast {
   def ind(indent: Int): String = Array.fill(indent)(' ').mkString
 
   sealed trait stmt extends Ast
+  
+  sealed trait Def extends stmt {
+    val name: identifier
+  }
 
   object stmt {
-    case class FunctionDef(name: identifier, args: arguments, body: Seq[stmt], decorator_list: Seq[expr], ret: Option[identifier]) extends stmt {
+    case class FunctionDef(name: identifier, args: arguments, body: Seq[stmt], decorator_list: Seq[expr], ret: Option[identifier]) extends Def {
       override def render(indent: Int = 0): String = s"def ${name.render()}(${args.render()}${ret.map(t => s" -> ${t.render}").getOrElse("")}:${body.map(_.render(indent + 3)).mkString("\n", "\n", "\n\n")}"
     }
 
-    case class ClassDef(name: identifier, bases: Seq[expr], body: Seq[stmt], decorator_list: Seq[expr]) extends stmt
+    case class ClassDef(name: identifier, bases: Seq[expr], body: Seq[stmt], decorator_list: Seq[expr]) extends Def
 
     case class Return(value: Option[expr]) extends stmt
 
@@ -275,7 +279,7 @@ object Ast {
     case class ExceptHandler(`type`: Option[expr], name: Option[expr], body: Seq[stmt]) extends excepthandler
   }
 
-  case class arguments(args: Seq[expr], vararg: Option[identifier], kwarg: Option[identifier], defaults: Seq[expr]) extends Ast
+  case class arguments(args: Seq[expr] = Seq.empty, vararg: Option[identifier] = None, kwarg: Option[identifier] = None, defaults: Seq[expr] = Seq.empty) extends Ast
 
   // keyword arguments supplied to call
   case class keyword(arg: identifier, value: expr) extends Ast

@@ -78,7 +78,7 @@ class NirCodeGen(val settings: GenNIR.Settings)(using ctx: Context)
       .foreach(genClass)
 
     generatedDefns.toSeq
-      .groupBy(defn => getFileFor(cunit, defn.name.top))
+      .groupBy(defn => getFileFor(cunit, nir.Global.Top(defn.name.name)))
       .foreach(genIRFile(_, _))
 
     reflectiveInstantiationBuffers
@@ -101,12 +101,12 @@ class NirCodeGen(val settings: GenNIR.Settings)(using ctx: Context)
        * conflicting top-level classes. However, it uses `toLowerCase()`
        * without argument, which is not deterministic.
        */
-      def caseInsensitiveNameOf(classDef: nir.Defn.Class): String =
-        classDef.name.mangle.toLowerCase(java.util.Locale.ENGLISH)
+      def caseInsensitiveNameOf(classDef: Ast.stmt.classDef): String =
+        classDef.name.name.toLowerCase(java.util.Locale.ENGLISH)
 
       val generatedCaseInsensitiveNames =
         generatedDefns.collect {
-          case cls: Defn.Class => caseInsensitiveNameOf(cls)
+          case cls: Ast.stmt.ClassDef => caseInsensitiveNameOf(cls)
         }.toSet
 
       for ((site, staticCls) <- generatedStaticForwarderClasses) {
@@ -127,11 +127,18 @@ class NirCodeGen(val settings: GenNIR.Settings)(using ctx: Context)
     }
   }
 
+    def serializeBinary(defns: Seq[Ast.stmt], out: OutputStream): Unit = {
+      val writer = new PrintWriter(out)
+      for (stat <- defns) {
+        writer.println(stat.render())
+      }
+      writer.close()
+    }
+
   private def genIRFile(
       outfile: dotty.tools.io.AbstractFile,
       defns: Seq[Ast.stmt]
   ): Unit = {
-    import scalanative.nir.serialization.serializeBinary
     val output = outfile.bufferedOutput
     try {
       serializeBinary(defns, output)
